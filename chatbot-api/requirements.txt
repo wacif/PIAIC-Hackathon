@@ -1,7 +1,0 @@
-fastapi
-uvicorn[standard]
-qdrant-client[fastembed]
-python-dotenv
-openai-agents
-fastembed
-openai
