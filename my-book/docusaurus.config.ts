@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'PIAIC Hackathon Book',
-  tagline: 'AI-Powered Interactive Book with RAG Chatbot',
+  tagline: 'AI-Powered Interactive Documentation',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
