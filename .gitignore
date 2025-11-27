@@ -1,6 +1,12 @@
 node_modules
 .docusaurus
-build
+my-book/build
 
-chatbot-api/
-my-book/
+# Python virtual environment
+chatbot-api/venv
+chatbot-api/__pycache__
+chatbot-api/.env
+
+# IDE
+.vscode
+.idea

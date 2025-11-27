@@ -1,0 +1,26 @@
+.
+├── ARCHITECTURE.md
+├── chatbot-api
+│   ├── ingestion.py
+│   ├── main.py
+│   └── requirements.txt
+├── DEPLOYMENT_GUIDE.md
+├── hackathon_project_plan.md
+├── my-book
+│   ├── blog
+│   ├── docs
+│   ├── docusaurus.config.ts
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── README.md
+│   ├── sidebars.ts
+│   ├── src
+│   ├── static
+│   └── tsconfig.json
+├── PROJECT_STRUCTURE.txt
+├── PROJECT_SUMMARY.md
+├── QUICK_START.md
+├── README.md
+└── SETUP_COMPLETE.md
+
+7 directories, 17 files
