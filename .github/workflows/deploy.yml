@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - rag-chatbot-development
     paths:
       - 'my-book/**'
       - '.github/workflows/deploy.yml'
