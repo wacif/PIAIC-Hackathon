@@ -72,7 +72,7 @@ async def health_check():
         "qdrant": qdrant_status,
         "collection_exists": collection_exists,
         "gemini_configured": GEMINI_API_KEY is not None,
-        "agent": "gemini-2.0-flash-exp"
+        "agent": "gemini-2.5-flash-lite"
     }
 
 @app.get("/collections")

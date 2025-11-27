@@ -5,7 +5,7 @@ import os
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from agents import Agent, OpenAIChatCompletionsModel, Runner, set_tracing_disabled
+from agents import Agent, OpenAIChatCompletionsModel, Runner, set_tracing_disabled, function_tool
 from qdrant_client import QdrantClient
 from fastembed import TextEmbedding
 
@@ -44,16 +44,13 @@ def get_embedding_model():
 set_tracing_disabled(disabled=True)
 
 
-def search_book_content(query: str, limit: int = 5) -> List[Dict[str, Any]]:
-    """
-    Tool function to search book content using Qdrant vector search.
+@function_tool
+def search_book_content(query: str, limit: int = 5) -> str:
+    """Search book content using vector search to find relevant information.
     
     Args:
-        query: The search query
-        limit: Maximum number of results to return
-        
-    Returns:
-        List of relevant content chunks with metadata
+        query: The search query to find relevant book content.
+        limit: Maximum number of results to return (default: 5).
     """
     try:
         # Generate embedding for the query
@@ -67,21 +64,26 @@ def search_book_content(query: str, limit: int = 5) -> List[Dict[str, Any]]:
             limit=limit
         ).points
         
-        # Format results
-        results = []
-        for result in search_results:
-            results.append({
-                "text": result.payload.get("text", ""),
-                "source": result.payload.get("source", "unknown"),
-                "type": result.payload.get("type", "unknown"),
-                "score": result.score
-            })
+        if not search_results:
+            return "No relevant content found in the book."
         
-        return results
+        # Format results as a readable string
+        formatted_results = []
+        for i, result in enumerate(search_results, 1):
+            text = result.payload.get("text", "")
+            source = result.payload.get("source", "unknown")
+            score = result.score
+            
+            formatted_results.append(
+                f"[Result {i}] (Relevance: {score:.2f})\n"
+                f"Source: {source}\n"
+                f"Content: {text}\n"
+            )
+        
+        return "\n---\n".join(formatted_results)
     
     except Exception as e:
-        print(f"Error searching book content: {e}")
-        return []
+        return f"Error searching book content: {str(e)}"
 
 
 # Create the RAG agent
@@ -105,7 +107,7 @@ Guidelines:
 - Format your responses clearly and professionally
 """,
     model=OpenAIChatCompletionsModel(
-        model="gemini-2.0-flash-exp",
+        model="gemini-2.5-flash-lite",
         openai_client=gemini_client
     ),
     tools=[search_book_content]
