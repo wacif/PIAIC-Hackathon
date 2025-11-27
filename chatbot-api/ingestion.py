@@ -103,22 +103,55 @@ def ingest_data(book_path: str = "../my-book"):
     
     print(f"Created {len(all_chunks)} chunks from documents")
     
-    # Recreate collection with FastEmbed
-    # FastEmbed uses 384-dimensional vectors by default (all-MiniLM-L6-v2)
-    client.recreate_collection(
-        collection_name=QDRANT_COLLECTION_NAME,
-        vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-    )
+    # Check if collection exists, if so delete it
+    try:
+        client.delete_collection(collection_name=QDRANT_COLLECTION_NAME)
+        print(f"Deleted existing collection '{QDRANT_COLLECTION_NAME}'")
+    except Exception:
+        pass
     
-    # Add documents with automatic embedding using FastEmbed
-    client.add(
+    # Create collection with FastEmbed support
+    # FastEmbed uses 384-dimensional vectors by default (all-MiniLM-L6-v2)
+    client.create_collection(
         collection_name=QDRANT_COLLECTION_NAME,
-        documents=[chunk["text"] for chunk in all_chunks],
-        metadata=[{
-            "source": chunk["source"],
-            "type": chunk["type"],
-            "chunk_id": chunk["chunk_id"]
-        } for chunk in all_chunks],
+        vectors_config=VectorParams(
+            size=384,
+            distance=Distance.COSINE,
+        ),
+    )
+    print(f"Created collection '{QDRANT_COLLECTION_NAME}'")
+    
+    # Initialize FastEmbed for generating embeddings
+    from fastembed import TextEmbedding
+    embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+    
+    # Generate embeddings and create points
+    points = []
+    print("Generating embeddings...")
+    
+    for idx, chunk in enumerate(all_chunks):
+        # Generate embedding for the chunk
+        embedding = list(embedding_model.embed([chunk["text"]]))[0]
+        
+        # Create point
+        points.append(
+            PointStruct(
+                id=idx,
+                vector=embedding.tolist(),
+                payload={
+                    "text": chunk["text"],
+                    "source": chunk["source"],
+                    "type": chunk["type"],
+                    "chunk_id": chunk["chunk_id"]
+                }
+            )
+        )
+    
+    # Upload points to Qdrant
+    print(f"Uploading {len(points)} points to Qdrant...")
+    client.upsert(
+        collection_name=QDRANT_COLLECTION_NAME,
+        points=points
     )
     
     print(f"✅ Successfully ingested {len(all_chunks)} chunks into Qdrant collection '{QDRANT_COLLECTION_NAME}'")

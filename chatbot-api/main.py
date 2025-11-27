@@ -4,14 +4,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from dotenv import load_dotenv
-from openai import OpenAI
+from agent import query_agent, qdrant_client
 
 load_dotenv()
 
 app = FastAPI(
     title="RAG Chatbot API",
-    description="AI-powered chatbot with RAG capabilities for PIAIC Hackathon Book",
-    version="1.0.0"
+    description="AI-powered chatbot with RAG capabilities using Gemini and Qdrant",
+    version="2.0.0"
 )
 
 # CORS middleware for frontend integration
@@ -26,17 +26,8 @@ app.add_middleware(
 # Environment variables
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 QDRANT_COLLECTION_NAME = "book_content"
-
-# Initialize clients
-qdrant_client = QdrantClient(
-    url=QDRANT_URL,
-    api_key=QDRANT_API_KEY,
-    prefer_grpc=False,
-)
-
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # Request models
 class QueryRequest(BaseModel):
@@ -80,7 +71,8 @@ async def health_check():
         "status": "healthy",
         "qdrant": qdrant_status,
         "collection_exists": collection_exists,
-        "openai_configured": OPENAI_API_KEY is not None
+        "gemini_configured": GEMINI_API_KEY is not None,
+        "agent": "gemini-2.0-flash-exp"
     }
 
 @app.get("/collections")
@@ -96,95 +88,62 @@ async def list_collections():
 
 @app.post("/query", response_model=QueryResponse)
 async def query_book(request: QueryRequest):
-    """Query the book content using RAG."""
-    if not openai_client:
-        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+    """Query the book content using RAG with Gemini agent."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini API key not configured")
     
     try:
-        # Search for relevant content in Qdrant using FastEmbed
-        search_results = qdrant_client.query(
-            collection_name=QDRANT_COLLECTION_NAME,
-            query_text=request.question,
-            limit=request.max_results,
-        )
+        # Use the agent to answer the question
+        # The agent will automatically use the search_book_content tool
+        result = await query_agent(request.question)
         
-        if not search_results:
-            return QueryResponse(
-                answer="I couldn't find any relevant information in the book to answer your question.",
-                sources=[]
+        if not result["success"]:
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error", "Error processing query")
             )
         
-        # Prepare context from search results
-        context_parts = []
-        sources = []
-        
-        for result in search_results:
-            context_parts.append(result.document)
-            sources.append({
-                "source": result.metadata.get("source", "unknown"),
-                "type": result.metadata.get("type", "unknown"),
-                "score": result.score
-            })
-        
-        context = "\n\n".join(context_parts)
-        
-        # Generate answer using OpenAI
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant that answers questions based on the provided book content. Use only the information from the context to answer questions. If the context doesn't contain enough information, say so."
-                },
-                {
-                    "role": "user",
-                    "content": f"Context from the book:\n\n{context}\n\nQuestion: {request.question}\n\nPlease provide a clear and concise answer based on the context above."
-                }
-            ],
-            temperature=0.7,
-            max_tokens=500
-        )
-        
-        answer = response.choices[0].message.content
-        
+        # Note: The agent handles search internally via tools
+        # We return a simplified response for now
         return QueryResponse(
-            answer=answer,
-            sources=sources
+            answer=result["answer"],
+            sources=[{
+                "source": "agent_search",
+                "type": "rag",
+                "score": 1.0
+            }]
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
 
 @app.post("/query-selection", response_model=QueryResponse)
 async def query_selected_text(request: TextSelectionRequest):
     """Answer questions based on user-selected text from the book."""
-    if not openai_client:
-        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini API key not configured")
     
     try:
-        # Generate answer using only the selected text as context
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant that answers questions based on the provided text selection. Use only the information from the selected text to answer questions."
-                },
-                {
-                    "role": "user",
-                    "content": f"Selected text:\n\n{request.selected_text}\n\nQuestion: {request.question}\n\nPlease provide a clear and concise answer based on the selected text above."
-                }
-            ],
-            temperature=0.7,
-            max_tokens=500
+        # Use the agent with the selected text as context
+        result = await query_agent(
+            question=request.question,
+            context=request.selected_text
         )
         
-        answer = response.choices[0].message.content
+        if not result["success"]:
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error", "Error processing query")
+            )
         
         return QueryResponse(
-            answer=answer,
+            answer=result["answer"],
             sources=[{"source": "selected_text", "type": "selection", "score": 1.0}]
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
